@@ -1,0 +1,95 @@
+<Window
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="clr-namespace:InventorySystem.ViewModels"
+    mc:Ignorable="d"
+    x:Class="InventorySystem.MainWindow"
+    Title="InventorySystem"
+    Width="900" Height="580">
+
+  <!-- Hovedlayout: topbar + indhold i to kolonner -->
+  <Grid RowDefinitions="Auto,*" ColumnDefinitions="*,*" x:DataType="vm:MainWindowViewModel">
+
+    <!-- Topbar -->
+    <DockPanel Grid.Row="0" Grid.ColumnSpan="2" Margin="12">
+      <!-- Højre: total omsætning -->
+      <TextBlock
+        DockPanel.Dock="Right"
+        VerticalAlignment="Center"
+        FontWeight="SemiBold"
+        Text="{Binding TotalRevenue, StringFormat=Total revenue: {0:F2} DKK}"/>
+
+      <!-- Venstre: tilføj ordre + processér næste -->
+      <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" Spacing="8">
+        <!-- Vælg vare fra katalog -->
+        <ComboBox
+          Width="220"
+          ItemsSource="{Binding CatalogItems}"
+          SelectedItem="{Binding SelectedItem}"
+          PlaceholderText="Select item">
+          <ComboBox.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding Name}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+
+        <!-- Antal -->
+        <TextBox
+          Width="80"
+          Text="{Binding NewQuantity, UpdateSourceTrigger=PropertyChanged}"
+          Watermark="Qty" />
+
+        <!-- Tilføj til kø -->
+        <Button
+          Content="Add order"
+          Command="{Binding AddOrderCommand}"
+          Padding="12,6" />
+
+        <!-- Processér næste ordre -->
+        <Button
+          Content="Process next order"
+          Command="{Binding ProcessNextCommand}"
+          Padding="12,6"
+          MinWidth="160" />
+      </StackPanel>
+    </DockPanel>
+
+    <!-- Venstre: Queued orders -->
+    <Border Grid.Row="1" Grid.Column="0" Margin="12" Padding="8" BorderThickness="1" BorderBrush="Gray">
+      <Grid RowDefinitions="Auto,*">
+        <TextBlock Text="Queued orders" FontSize="16" FontWeight="SemiBold" Margin="2,0,0,6"/>
+        <DataGrid
+          Grid.Row="1"
+          ItemsSource="{Binding QueuedOrders}"
+          AutoGenerateColumns="False"
+          IsReadOnly="True">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="Item" Binding="{Binding Item.Name}" Width="*"/>
+            <DataGridTextColumn Header="Qty"  Binding="{Binding Quantity}"  Width="100"/>
+          </DataGrid.Columns>
+        </DataGrid>
+      </Grid>
+    </Border>
+
+    <!-- Højre: Processed orders -->
+    <Border Grid.Row="1" Grid.Column="1" Margin="12" Padding="8" BorderThickness="1" BorderBrush="Gray">
+      <Grid RowDefinitions="Auto,*">
+        <TextBlock Text="Processed orders" FontSize="16" FontWeight="SemiBold" Margin="2,0,0,6"/>
+        <DataGrid
+          Grid.Row="1"
+          ItemsSource="{Binding ProcessedOrders}"
+          AutoGenerateColumns="False"
+          IsReadOnly="True">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="Item" Binding="{Binding Item.Name}" Width="*"/>
+            <DataGridTextColumn Header="Qty"  Binding="{Binding Quantity}"  Width="100"/>
+          </DataGrid.Columns>
+        </DataGrid>
+      </Grid>
+    </Border>
+
+  </Grid>
+</Window>
