@@ -3,13 +3,15 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
-using System.Linq;
+using System.Threading.Tasks;               // for async/await
 
-using InventorySystem.Models;
+using InventorySystem.Models;              // Inventory, OrderBook, Item, UnitItem, Robot
 
 namespace InventorySystem.ViewModels
 {
-    // ----- Simpel ICommand-implementering til knapper -----
+    // -----------------------------
+    // Simple ICommand for buttons
+    // -----------------------------
     public sealed class RelayCommand : ICommand
     {
         private readonly Action<object?> _execute;
@@ -30,14 +32,19 @@ namespace InventorySystem.ViewModels
         public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    // ----- ViewModel til MainWindow -----
+    // -----------------------------
+    // ViewModel for MainWindow
+    // -----------------------------
     public class MainWindowViewModel : INotifyPropertyChanged
     {
-        // ----- Felter -----
+        // Domain objects
         private readonly Inventory _inventory;
         private readonly OrderBook _orderBook;
 
-        // ----- Katalog + valgt vare + mængde -----
+        // Robot interface
+        private readonly Robot _robot;
+
+        // Catalog for ComboBox
         public ObservableCollection<Item> CatalogItems { get; } = new();
 
         private Item? _selectedItem;
@@ -70,11 +77,11 @@ namespace InventorySystem.ViewModels
             }
         }
 
-        // ----- Lister til DataGrids -----
+        // Queues shown in DataGrids
         public ObservableCollection<Order> QueuedOrders { get; } = new();
         public ObservableCollection<Order> ProcessedOrders { get; } = new();
 
-        // ----- Indtægt i alt -----
+        // Revenue label
         private double _totalRevenue;
         public double TotalRevenue
         {
@@ -89,41 +96,46 @@ namespace InventorySystem.ViewModels
             }
         }
 
-        // ----- Commands til knapper -----
+        // Buttons
         public RelayCommand AddOrderCommand { get; }
         public RelayCommand ProcessNextCommand { get; }
 
-        // ----- Constructor -----
         public MainWindowViewModel()
         {
             _inventory = new Inventory();
             _orderBook = new OrderBook();
 
-            // --- KATALOG & STARTLAGER ---
-            var hydraulicPump = new UnitItem(name: "hydraulic pump", pricePerUnit: 8500, weight: 0);
-            var plcModule     = new UnitItem(name: "PLC module",     pricePerUnit: 1200, weight: 0);
-            var servoMotor    = new UnitItem(name: "servo motor",    pricePerUnit: 4300, weight: 0);
+            // ---- Robot config ----
+            _robot = new Robot
+            {
+                // Use 127.0.0.1 if you reach URSim via Docker port mapping (recommended).
+                // Use 172.17.0.2 only if you connect straight to the container’s IP.
+                IpAddress = "127.0.0.1"
+            };
 
-            // Læg i katalog (dropdown viser disse)
+            // --- Catalog & initial stock ---
+            var hydraulicPump = new UnitItem("hydraulic pump", 8500, weight: 0);
+            var plcModule     = new UnitItem("PLC module",     1200, weight: 0);
+            var servoMotor    = new UnitItem("servo motor",    4300, weight: 0);
+
             CatalogItems.Clear();
             CatalogItems.Add(hydraulicPump);
             CatalogItems.Add(plcModule);
             CatalogItems.Add(servoMotor);
 
-            // Startlager
             _inventory.AddCatalogItem(hydraulicPump, initialAmount: 5);
             _inventory.AddCatalogItem(plcModule,     initialAmount: 10);
             _inventory.AddCatalogItem(servoMotor,    initialAmount: 3);
 
             // Commands
-            AddOrderCommand    = new RelayCommand(_ => AddOrder(), _ => CanAddOrder());
+            AddOrderCommand    = new RelayCommand(_ => AddOrder(),    _ => CanAddOrder());
             ProcessNextCommand = new RelayCommand(_ => ProcessNext(), _ => CanProcessNext());
 
             RefreshLists();
             UpdateButtons();
         }
 
-        // ----- UI-hjælpere -----
+        // -------- Helpers --------
         private void RefreshLists()
         {
             QueuedOrders.Clear();
@@ -141,7 +153,7 @@ namespace InventorySystem.ViewModels
             ProcessNextCommand.RaiseCanExecuteChanged();
         }
 
-        // ----- Tilføj ordre -----
+        // -------- Add order --------
         private bool CanAddOrder() => SelectedItem != null && NewQuantity > 0;
 
         private void AddOrder()
@@ -151,28 +163,43 @@ namespace InventorySystem.ViewModels
             var order = new Order(SelectedItem, NewQuantity);
             _orderBook.QueueOrder(order);
 
-            // nulstil mængde og opdater visning
             NewQuantity = 1;
             RefreshLists();
             UpdateButtons();
         }
 
-        // ----- Processér næste ordre -----
+        // -------- Process next order (robot hook calls Robot.RunSequence) --------
         private bool CanProcessNext() => _orderBook.QueuedOrders.Count > 0;
 
-        private void ProcessNext()
+        private async void ProcessNext()
         {
-            // ProcessNextOrder returnerer bool
+            if (_orderBook.QueuedOrders.Count == 0) return;
+
+            // Peek before processing (optional: use for UI feedback)
+            var next = _orderBook.QueuedOrders.Peek();
+
+            // Try to process it (this will dequeue internally if successful)
             bool processed = _orderBook.ProcessNextOrder(_inventory);
             if (!processed) return;
 
-            // Opdatér indtægt + visning
+            // --- Trigger robot. This wraps your working URScript internally. ---
+            try
+            {
+                // Run on a background thread so the UI doesn't block
+                await Task.Run(() => _robot.RunSequence());
+            }
+            catch
+            {
+                // Swallow robot errors for demo stability
+            }
+
+            // Update revenue and lists
             TotalRevenue = _orderBook.TotalRevenue;
             RefreshLists();
             UpdateButtons();
         }
 
-        // ----- INotifyPropertyChanged -----
+        // INotifyPropertyChanged
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string? name = null)
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
